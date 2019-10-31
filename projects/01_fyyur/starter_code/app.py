@@ -69,6 +69,8 @@ class Artist(db.Model):
     seeking_talent = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(120))
     artist_shows = db.relationship('Shows', backref='artists', lazy = True)
+    
+  
 
     def __repr__(self):
     	return f'<id: {self.id}, name: {self.name}, genres: {self.genres}, city: {self.city}, state: {self.state}, phone: {self.phone}, website: {self.website}, facebook_link: {self.facebook_link}>'
@@ -110,7 +112,9 @@ app.jinja_env.filters['datetime'] = format_datetime
 
 @app.route('/')
 def index():
-  return render_template('pages/home.html')
+  latest_venues  = Venue.query.order_by(desc('id')).limit(10).all()
+  latest_artists = Artist.query.order_by(desc('id')).limit(10).all()	
+  return render_template('pages/home.html', latest_venues = latest_venues, latest_artists = latest_artists)
 
 
 #  Venues
@@ -144,7 +148,7 @@ def venues():
 
 
   all_cities = db.session.query(Venue.city, Venue.state).group_by(Venue.city, Venue.state).all()
-
+  print(all_cities)
   data = []
 
   for each_city in all_cities:
@@ -153,7 +157,7 @@ def venues():
   	city_dict['state'] = each_city.state
 
   	venues_list = []
-  	all_venues_in_city = Venue.query.filter_by(city = each_city[0]).all()
+  	all_venues_in_city = Venue.query.filter_by(city = each_city[0] , state = each_city[1]).all()
 
   	for each_venue in all_venues_in_city:
   		venue_dict = {}
@@ -176,28 +180,56 @@ def venues():
 
   	data.append(city_dict) #each city data appended
 
-
-
-
-
-
-
   return render_template('pages/venues.html', areas=data);
+
 
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
   # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
   # seach for Hop should return "The Musical Hop".
   # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
-  response={
-    "count": 1,
-    "data": [{
-      "id": 2,
-      "name": "The Dueling Pianos Bar",
-      "num_upcoming_shows": 0,
-    }]
-  }
+
+  search_term = request.form.get('search_term', '')
+  search = func.lower("%{}%".format(search_term))
+
+  all_venues = Venue.query.filter(func.lower(Venue.name).like(search)).all()
+
+  # print(all_venues)
+
+  all_venue_data = []
+
+  for each_venue in all_venues:
+
+	  shows_by_venue = each_venue.venue_shows
+
+	  upcoming_shows = 0
+
+	  for each_show in shows_by_venue:
+	  	if(datetime.now() < each_show.start_time):
+	  	  upcoming_shows += 1
+
+	  venue_data  = {}
+	  venue_data['id'] = each_venue.id
+	  venue_data['name'] = each_venue.name
+	  venue_data['num_upcoming_shows'] = upcoming_shows
+
+	  all_venue_data.append(venue_data)
+  
+  response = {}
+
+  response['count'] = len(all_venue_data)
+  response['data']  = all_venue_data
+
+  # response={
+  #   "count": 1,
+  #   "data": [{
+  #     "id": 2,
+  #     "name": "The Dueling Pianos Bar",
+  #     "num_upcoming_shows": 0,
+  #   }]
+  # }
   return render_template('pages/search_venues.html', results=response, search_term=request.form.get('search_term', ''))
+
 
 @app.route('/venues/<int:venue_id>')
 def show_venue(venue_id):
@@ -367,10 +399,21 @@ def create_venue_submission():
 def delete_venue(venue_id):
   # TODO: Complete this endpoint for taking a venue_id, and using
   # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
+  try:
+  	venueToDelete = Venue.query.filter_by(id = venue_id)   #Delete  DB
+  	# print(venueToDelete)
+  	venueToDelete.delete()
 
+  	db.session.commit()
+  except:
+  	db.session.rollback()
+  finally:
+  	db.session.close()
+ 			
   # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
   # clicking that button delete it from the db then redirect the user to the homepage
-  return None
+  
+  return "Success"
 
 #  Artists
 #  ----------------------------------------------------------------
@@ -397,14 +440,47 @@ def search_artists():
   # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
   # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
   # search for "band" should return "The Wild Sax Band".
-  response={
-    "count": 1,
-    "data": [{
-      "id": 4,
-      "name": "Guns N Petals",
-      "num_upcoming_shows": 0,
-    }]
-  }
+  
+  search_term = request.form.get('search_term', '')
+  search = func.lower("%{}%".format(search_term))
+
+  all_artists = Artist.query.filter(func.lower(Artist.name).like(search)).all()
+
+  # print(all_artists)
+
+  all_artists_data = []
+
+  for each_artist in all_artists:
+
+	  shows_by_artist = each_artist.artist_shows
+
+	  upcoming_shows = 0
+
+	  for each_show in shows_by_artist:
+	  	if(datetime.now() < each_show.start_time):
+	  	  upcoming_shows += 1
+
+	  artist_data  = {}
+	  artist_data['id'] = each_artist.id
+	  artist_data['name'] = each_artist.name
+	  artist_data['num_upcoming_shows'] = upcoming_shows
+
+	  all_artists_data.append(artist_data)
+  
+  response = {}
+
+  response['count'] = len(all_artists_data)
+  response['data']  = all_artists_data
+
+  # response={
+  #   "count": 1,
+  #   "data": [{
+  #     "id": 4,
+  #     "name": "Guns N Petals",
+  #     "num_upcoming_shows": 0,
+  #   }]
+  # }
+
   return render_template('pages/search_artists.html', results=response, search_term=request.form.get('search_term', ''))
 
 @app.route('/artists/<int:artist_id>')
@@ -484,7 +560,7 @@ def show_artist(artist_id):
   # }
 
   data = Artist.query.filter_by(id = artist_id).first()
-  print(artist_id, ' : ', data)
+  # print(artist_id, ' : ', data)
   shows_by_artist = data.artist_shows
 
   past_shows = []
@@ -760,12 +836,19 @@ def create_show_submission():
 
   show_ins.start_time = datetime.strptime(show_ins.start_time, '%Y-%m-%d %H:%M:%S')
 
+  timingNotSuitable = False;
+
+  if(timingNotSuitable):
+    flash('Show timing not suitable to the artist.')
+    return redirect(url_for('create_shows'))
+
 
   error = False
 
   try:
-  	db.session.add(show_ins) #Insert in DB
-  	db.session.commit()
+  	# db.session.add(show_ins) #Insert in DB
+  	# db.session.commit()
+    print('Commit')
   except:
   	db.session.rollback()
   	error = True
@@ -777,13 +860,14 @@ def create_show_submission():
   else:
   	flash('Show was successfully listed!')
   	
-
   # on successful db insert, flash success
   # flash('Show was successfully listed!')
   # TODO: on unsuccessful db insert, flash an error instead.
   # e.g., flash('An error occurred. Show could not be listed.')
   # see: http://flask.pocoo.org/docs/1.0/patterns/flashing/
+
   return render_template('pages/home.html')
+
 
 @app.errorhandler(404)
 def not_found_error(error):
