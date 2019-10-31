@@ -69,8 +69,11 @@ class Artist(db.Model):
     seeking_talent = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(120))
     artist_shows = db.relationship('Shows', backref='artists', lazy = True)
-    
-  
+    artist_date_begin = db.Column(db.Date)
+    artist_date_end = db.Column(db.Date)
+    artist_time_begin = db.Column(db.Time)
+    artist_time_end = db.Column(db.Time)
+
 
     def __repr__(self):
     	return f'<id: {self.id}, name: {self.name}, genres: {self.genres}, city: {self.city}, state: {self.state}, phone: {self.phone}, website: {self.website}, facebook_link: {self.facebook_link}>'
@@ -833,13 +836,27 @@ def create_show_submission():
   for i in data_recd_imm:
   		setattr(show_ins, i, data_recd_imm[i])
 
-
   show_ins.start_time = datetime.strptime(show_ins.start_time, '%Y-%m-%d %H:%M:%S')
 
-  timingNotSuitable = False;
+  show_date = show_ins.start_time.date()
+  show_time = show_ins.start_time.time()
+
+  
+  reqArtist = Artist.query.filter_by(id = show_ins.artist_id).first()
+
+  timingNotSuitable = False; #Default state
+
+  if ( (reqArtist.artist_time_begin) and (show_time < reqArtist.artist_time_begin) ): #Check begin time
+    timingNotSuitable = True
+  if ( (reqArtist.artist_time_end) and (show_time > reqArtist.artist_time_end) ): #Check end time
+    timingNotSuitable = True
+  if ( (reqArtist.artist_date_begin) and (show_date < reqArtist.artist_date_begin) ): #Check begin time
+    timingNotSuitable = True
+  if ( (reqArtist.artist_date_end) and (show_date > reqArtist.artist_date_end) ): #Check end time
+    timingNotSuitable = True
 
   if(timingNotSuitable):
-    flash('Show timing not suitable to the artist.')
+    flash('Available date for artist is ' + reqArtist.artist_date_begin.strftime('%Y-%m-%d') + ' to ' + reqArtist.artist_date_end.strftime('%Y-%m-%d') + ' between ' + reqArtist.artist_time_begin.strftime('%H:%M:%S') + ' to ' + reqArtist.artist_time_end.strftime('%H:%M:%S'))
     return redirect(url_for('create_shows'))
 
 
